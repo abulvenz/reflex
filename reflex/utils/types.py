@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import inspect
 import sys
 import types
 from functools import cached_property, lru_cache, wraps
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
@@ -95,8 +97,22 @@ PrimitiveType = Union[int, float, bool, str, list, dict, set, tuple]
 StateVar = Union[PrimitiveType, Base, None]
 StateIterVar = Union[list, set, tuple]
 
-# ArgsSpec = Callable[[Var], list[Var]]
-ArgsSpec = Callable
+if TYPE_CHECKING:
+    from reflex.vars.base import Var
+
+    # ArgsSpec = Callable[[Var], list[Var]]
+    ArgsSpec = (
+        Callable[[], List[Var]]
+        | Callable[[Var], List[Var]]
+        | Callable[[Var, Var], List[Var]]
+        | Callable[[Var, Var, Var], List[Var]]
+        | Callable[[Var, Var, Var, Var], List[Var]]
+        | Callable[[Var, Var, Var, Var, Var], List[Var]]
+        | Callable[[Var, Var, Var, Var, Var, Var], List[Var]]
+        | Callable[[Var, Var, Var, Var, Var, Var, Var], List[Var]]
+    )
+else:
+    ArgsSpec = Callable[..., List[Any]]
 
 
 PrimitiveToAnnotation = {
@@ -110,6 +126,11 @@ RESERVED_BACKEND_VAR_NAMES = {
     "_backend_vars",
     "_was_touched",
 }
+
+if sys.version_info >= (3, 11):
+    from typing import Self as Self
+else:
+    from typing_extensions import Self as Self
 
 
 class Unset:
@@ -475,7 +496,11 @@ def is_valid_var_type(type_: Type) -> bool:
 
     if is_union(type_):
         return all((is_valid_var_type(arg) for arg in get_args(type_)))
-    return _issubclass(type_, StateVar) or serializers.has_serializer(type_)
+    return (
+        _issubclass(type_, StateVar)
+        or serializers.has_serializer(type_)
+        or dataclasses.is_dataclass(type_)
+    )
 
 
 def is_backend_base_variable(name: str, cls: Type) -> bool:
@@ -509,14 +534,14 @@ def is_backend_base_variable(name: str, cls: Type) -> bool:
     if name in cls.inherited_backend_vars:
         return False
 
+    from reflex.vars.base import is_computed_var
+
     if name in cls.__dict__:
         value = cls.__dict__[name]
         if type(value) == classmethod:
             return False
         if callable(value):
             return False
-        from reflex.ivars.base import ImmutableComputedVar
-        from reflex.vars import ComputedVar
 
         if isinstance(
             value,
@@ -524,10 +549,8 @@ def is_backend_base_variable(name: str, cls: Type) -> bool:
                 types.FunctionType,
                 property,
                 cached_property,
-                ComputedVar,
-                ImmutableComputedVar,
             ),
-        ):
+        ) or is_computed_var(value):
             return False
 
     return True

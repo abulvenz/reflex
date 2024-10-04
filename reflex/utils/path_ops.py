@@ -129,7 +129,42 @@ def which(program: str | Path) -> str | Path | None:
     return shutil.which(str(program))
 
 
-def get_node_bin_path() -> str | None:
+def use_system_install(var_name: str) -> bool:
+    """Check if the system install should be used.
+
+    Args:
+        var_name: The name of the environment variable.
+
+    Raises:
+        ValueError: If the variable name is invalid.
+
+    Returns:
+        Whether the associated env var should use the system install.
+    """
+    if not var_name.startswith("REFLEX_USE_SYSTEM_"):
+        raise ValueError("Invalid system install variable name.")
+    return os.getenv(var_name, "").lower() in ["true", "1", "yes"]
+
+
+def use_system_node() -> bool:
+    """Check if the system node should be used.
+
+    Returns:
+        Whether the system node should be used.
+    """
+    return use_system_install(constants.Node.USE_SYSTEM_VAR)
+
+
+def use_system_bun() -> bool:
+    """Check if the system bun should be used.
+
+    Returns:
+        Whether the system bun should be used.
+    """
+    return use_system_install(constants.Bun.USE_SYSTEM_VAR)
+
+
+def get_node_bin_path() -> Path | None:
     """Get the node binary dir path.
 
     Returns:
@@ -138,8 +173,8 @@ def get_node_bin_path() -> str | None:
     bin_path = Path(constants.Node.BIN_PATH)
     if not bin_path.exists():
         str_path = which("node")
-        return str(Path(str_path).parent.resolve()) if str_path else str_path
-    return str(bin_path.resolve())
+        return Path(str_path).parent.resolve() if str_path else None
+    return bin_path.resolve()
 
 
 def get_node_path() -> str | None:
@@ -149,7 +184,7 @@ def get_node_path() -> str | None:
         The path to the node binary file.
     """
     node_path = Path(constants.Node.PATH)
-    if not node_path.exists():
+    if use_system_node() or not node_path.exists():
         return str(which("node"))
     return str(node_path)
 
